@@ -58,14 +58,25 @@ def prune_spurs(skeleton, distances, ratio=1.0):
 
 
 def extract_skeleton(image, min_area=64, method="thinning", boundary="reflect",
-                     prune_ratio=1.0):
+                     prune_ratio=1.0, opening_radius=2):
     """Return cleaned foreground, skeleton, and boundary distance in pixels.
 
     Thinning preserves topology while reducing regions to centerlines. The
     medial axis follows centers of maximal inscribed disks, but can create
     extra branches in response to small boundary irregularities.
+    A small opening removes attached specks before they generate long spurs.
+    Set opening_radius=0 to preserve the original foreground outline.
     """
+    if not isinstance(opening_radius, (int, np.integer)) or opening_radius < 0:
+        raise ValueError("opening_radius must be a nonnegative integer")
     _, binary = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if opening_radius:
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (2 * opening_radius + 1, 2 * opening_radius + 1))
+        binary = cv2.morphologyEx(
+            binary, cv2.MORPH_OPEN, kernel,
+            borderType=cv2.BORDER_REFLECT_101 if boundary == "reflect" else cv2.BORDER_CONSTANT,
+            borderValue=0)
     labels, count = ndi.label(binary > 0, structure=np.ones((3, 3)))
     sizes = np.bincount(labels.ravel(), minlength=count + 1)
     keep = sizes >= min_area
@@ -101,17 +112,21 @@ def main():
                         help="How patterns continue outside the image (default: reflect)")
     parser.add_argument("--prune-ratio", type=float, default=1.0,
                         help="Prune terminal branches shorter than this times local radius; 0 disables")
+    parser.add_argument("--opening-radius", type=int, default=2,
+                        help="Radius in pixels for removing small attached specks before thinning; 0 disables")
     args = parser.parse_args()
     if args.min_area < 1:
         parser.error("--min-area must be positive")
     if not np.isfinite(args.prune_ratio) or args.prune_ratio < 0:
         parser.error("--prune-ratio must be finite and nonnegative")
+    if args.opening_radius < 0:
+        parser.error("--opening-radius must be nonnegative")
     gray = cv2.imread(str(args.input), cv2.IMREAD_GRAYSCALE)
     if gray is None:
         parser.error(f"Cannot read image: {args.input}")
     started = perf_counter()
     foreground, skeleton, distances = extract_skeleton(
-        gray, args.min_area, args.method, args.boundary, args.prune_ratio)
+        gray, args.min_area, args.method, args.boundary, args.prune_ratio, args.opening_radius)
     extraction_seconds = perf_counter() - started
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "timing.json").write_text(json.dumps({
@@ -119,6 +134,7 @@ def main():
         "method": args.method,
         "boundary": args.boundary,
         "prune_ratio": args.prune_ratio,
+        "opening_radius": args.opening_radius,
         "extract_skeleton_seconds": extraction_seconds,
     }, indent=2) + "\n")
     overlay = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)

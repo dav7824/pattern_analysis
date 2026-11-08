@@ -1,12 +1,35 @@
 import unittest
 
+import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
 from skeletonize_patterns import extract_skeleton, prune_spurs
+from generate_examples import make_images
 
 
 class SkeletonTests(unittest.TestCase):
+    def test_attached_speck_does_not_create_branch(self):
+        image = dict(make_images())["irregular_edges_and_specks"]
+        # Match the JPEG input used by the example runner.
+        success, encoded = cv2.imencode(".jpeg", image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        self.assertTrue(success)
+        image = cv2.imdecode(encoded, cv2.IMREAD_GRAYSCALE)
+        _, before, _ = extract_skeleton(image, opening_radius=0)
+        mask, after, _ = extract_skeleton(image, opening_radius=2)
+
+        def endpoints(skeleton):
+            degree = ndi.convolve(skeleton.astype(int), np.ones((3, 3), int),
+                                  mode="constant") - skeleton
+            return np.argwhere(skeleton & (degree == 1))
+
+        self.assertEqual(len(endpoints(before)), 7)
+        ends = endpoints(after)
+        self.assertEqual(len(ends), 6)
+        self.assertTrue(np.all((ends[:, 1] == 0) | (ends[:, 1] == image.shape[1] - 1)))
+        self.assertEqual(ndi.label(after, np.ones((3, 3)))[1], 3)
+        self.assertTrue(np.all(mask[after]))
+
     def test_reflection_keeps_clipped_stripe_straight(self):
         image = np.zeros((100, 120), dtype=np.uint8)
         image[25:75, :] = 255

@@ -23,6 +23,14 @@ before thinning, then cropped back. This avoids artificial forks where a wide
 pattern is cut off by the image. Padding is twice the largest foreground radius.
 This assumes the pattern continues symmetrically outside the field of view.
 
+Before component filtering, an elliptical morphological opening with a two-pixel
+radius removes small attached specks and protrusions. Unlike area filtering,
+this also handles noise touching a large pattern. It prevents a tiny outline bump
+from generating a much longer skeleton branch. Change `--opening-radius` to
+match the noise scale, or set it to `0` to disable cleanup. Opening changes the
+mask and can erase narrow real features or split thin connections; use `0` or a
+smaller radius when those features matter.
+
 Short terminal spurs are then removed iteratively when their path length is
 less than the local radius at their junction. Image-edge endpoints and whole
 unbranched components are protected. Genuine short branches can also be removed:
@@ -32,7 +40,7 @@ Reported radii use the extended mask, so crop edges are not treated as backgroun
 To reproduce the original closed-boundary behavior:
 
 ```sh
-python skeletonize_patterns.py --boundary black --prune-ratio 0 --output-dir output_original
+python skeletonize_patterns.py --boundary black --prune-ratio 0 --opening-radius 0 --output-dir output_original
 ```
 
 For centers of maximal inscribed disks, use `--method medial`; this can produce
