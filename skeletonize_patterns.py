@@ -2,7 +2,9 @@
 """Extract one-pixel-wide centerlines from white patterns on a dark background."""
 
 import argparse
+import json
 from pathlib import Path
+from time import perf_counter
 
 import cv2
 import numpy as np
@@ -107,9 +109,18 @@ def main():
     gray = cv2.imread(str(args.input), cv2.IMREAD_GRAYSCALE)
     if gray is None:
         parser.error(f"Cannot read image: {args.input}")
+    started = perf_counter()
     foreground, skeleton, distances = extract_skeleton(
         gray, args.min_area, args.method, args.boundary, args.prune_ratio)
+    extraction_seconds = perf_counter() - started
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    (args.output_dir / "timing.json").write_text(json.dumps({
+        "input": str(args.input),
+        "method": args.method,
+        "boundary": args.boundary,
+        "prune_ratio": args.prune_ratio,
+        "extract_skeleton_seconds": extraction_seconds,
+    }, indent=2) + "\n")
     overlay = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     overlay[skeleton] = (0, 0, 255)
     for name, image in (
@@ -127,6 +138,7 @@ def main():
                delimiter=",", header="x,y,radius_px", comments="", fmt=("%d", "%d", "%.4f"))
     _, count = ndi.label(foreground, structure=np.ones((3, 3)))
     print(f"Found {count} white patterns; {skeleton.sum()} skeleton pixels.")
+    print(f"extract_skeleton: {extraction_seconds * 1000:.3f} ms")
     print(f"Saved mask, skeleton, red overlay, and coordinates to {args.output_dir.resolve()}")
 
 

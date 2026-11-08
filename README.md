@@ -12,6 +12,9 @@ python skeletonize_patterns.py
 Results are saved in `output/`: a cleaned binary mask, a one-pixel-wide
 `skeleton.png`, a red centerline `overlay.png`, and `skeleton_points.csv`
 containing zero-based x/y coordinates and distance to the background in pixels.
+The CLI prints the elapsed `extract_skeleton` time in milliseconds and saves it
+as `extract_skeleton_seconds` in `timing.json`. It uses `time.perf_counter()`
+around the function call, excluding imports, image loading, and output writing.
 
 OpenCV reads the image and applies Otsu thresholding. SciPy removes small
 connected components and calculates boundary distances. Scikit-image thins
@@ -54,3 +57,8 @@ noise components. `examples/report.json` records component and hole counts;
 the generator checks containment, connected-component preservation, and hole
 preservation. These are synthetic sanity checks rather than a general accuracy
 benchmark.
+Each report entry also records `extract_skeleton_seconds` and `script_seconds`.
+The latter measures the complete CLI subprocess, including Python startup,
+imports, image loading, and writing results; it excludes image generation and
+the generator's validation/preview work. Timings are single-run wall-clock
+measurements and will vary between runs.

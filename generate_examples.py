@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from time import perf_counter
 
 import cv2
 import numpy as np
@@ -70,8 +71,11 @@ def main():
         source = directory / "input.jpeg"
         if not cv2.imwrite(str(source), image, [cv2.IMWRITE_JPEG_QUALITY, 92]):
             raise OSError(source)
+        started = perf_counter()
         subprocess.run([sys.executable, str(ROOT / "skeletonize_patterns.py"),
                         str(source), "--output-dir", str(directory)], check=True)
+        script_seconds = perf_counter() - started
+        timing = json.loads((directory / "timing.json").read_text())
         mask = cv2.imread(str(directory / "mask.png"), 0) > 0
         skeleton = cv2.imread(str(directory / "skeleton.png"), 0) > 0
         components = int(ndi.label(mask, np.ones((3, 3)))[1])
@@ -81,6 +85,8 @@ def main():
         assert components == 3, f"Unexpected pattern count: {name}"
         assert euler_number(mask, connectivity=2) == euler_number(skeleton, connectivity=2), name
         report.append(dict(name=name, foreground_components=components,
+                           extract_skeleton_seconds=timing["extract_skeleton_seconds"],
+                           script_seconds=script_seconds,
                            skeleton_components=skeleton_components,
                            foreground_holes=components - int(euler_number(mask, connectivity=2)),
                            skeleton_holes=skeleton_components - int(euler_number(skeleton, connectivity=2)),
